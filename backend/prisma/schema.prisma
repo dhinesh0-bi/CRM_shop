@@ -1,0 +1,33 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Customer {
+  id        Int       @id @default(autoincrement())
+  name      String
+  phone     String    @unique
+  payments  Payment[]
+  doorNumber String
+  createdAt DateTime  @default(now())
+}
+
+model Payment {
+  id               Int      @id @default(autoincrement())
+  amount           Float
+  status           String   @default("PENDING") // PENDING, PAID
+  razorpayLinkId   String?
+  customer         Customer @relation(fields: [customerId], references: [id])
+  customerId       Int
+  createdAt        DateTime @default(now())
+  doorNumber       String
+  paidAt           DateTime?
+  deliveryMethod String?  @default("whatsapp")
+}
