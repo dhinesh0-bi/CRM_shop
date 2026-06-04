@@ -1,151 +1,341 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Smartphone, MessageCircle, Search, CheckCircle, Banknote } from 'lucide-react';
+import BASE_URL from '../api';
+import { Smartphone, MessageCircle, Search, CheckCircle, Banknote, Receipt, X, IndianRupee } from 'lucide-react';
 
 export default function Billing() {
   const [customers, setCustomers] = useState([]);
   const [nameQuery, setNameQuery] = useState('');
-  const [activeSearch, setActiveSearch] = useState(null); 
+  const [activeSearch, setActiveSearch] = useState(null);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
-  
-  // New Form State Checkboxes
+
   const [amount, setAmount] = useState('');
   const [notifyWhatsapp, setNotifyWhatsapp] = useState(true);
   const [notifySms, setNotifySms] = useState(false);
   const [isCash, setIsCash] = useState(false);
-  
   const [status, setStatus] = useState({ type: '', message: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    axios.get('http://localhost:8080/api/customers')
-      .then(res => setCustomers(res.data))
-      .catch(err => console.error(err));
+    axios
+      .get(`${BASE_URL}/api/customers`)
+      .then((res) => setCustomers(res.data))
+      .catch((err) => console.error(err));
   }, []);
 
   const handleSelectCustomer = (customer) => {
     setSelectedCustomer(customer);
     setNameQuery(customer.doorNumber || '');
-    setActiveSearch(null); 
+    setActiveSearch(null);
+  };
+
+  const handleClearCustomer = () => {
+    setSelectedCustomer(null);
+    setNameQuery('');
   };
 
   const handleSendBill = async (e) => {
     e.preventDefault();
     if (!selectedCustomer) {
-      setStatus({ type: 'error', message: '❌ Please select a valid customer.' });
+      setStatus({ type: 'error', message: 'Please select a valid customer first.' });
       return;
     }
+    setIsSubmitting(true);
+    setStatus({ type: 'info', message: 'Processing transaction...' });
 
-    setStatus({ type: 'loading', message: 'Processing transaction...' });
     try {
-      const res = await axios.post('http://localhost:8080/api/billing/send', { 
-        customerId: selectedCustomer.id, 
-        amount, 
+      const res = await axios.post(`${BASE_URL}/api/billing/send`, {
+        customerId: selectedCustomer.id,
+        amount,
         notifyWhatsapp,
         notifySms,
-        isCash 
+        isCash,
       });
-      setStatus({ type: 'success', message: `✅ ${res.data.message}` });
-      
+      setStatus({ type: 'success', message: res.data.message });
       setAmount('');
       setNameQuery('');
       setSelectedCustomer(null);
     } catch (error) {
-      setStatus({ type: 'error', message: `❌ Failed to process bill.` });
+      setStatus({ type: 'error', message: 'Failed to process bill. Please try again.' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
+  const filtered = customers.filter((c) =>
+    c.doorNumber?.toLowerCase().includes(nameQuery.toLowerCase())
+  );
+
   return (
-    <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-8">
-      
-      <div className="mb-8 border-b border-slate-200/50 pb-4">
-        <h2 className="text-3xl font-extrabold text-white tracking-tight drop-shadow-md">Generate Bill</h2>
-        <p className="text-blue-200 mt-1 font-medium tracking-wide">Search customer and dispatch invoices instantly.</p>
+    <div className="p-6 md:p-10 max-w-2xl mx-auto animate-fade-in-up">
+
+      {/* ── PAGE HEADER ──────────────────────────────── */}
+      <div className="page-header">
+        <h1 className="page-title">Generate Bill</h1>
+        <p className="page-subtitle">Search a customer by door number and dispatch an invoice instantly.</p>
       </div>
 
-      <div className="bg-white/95 backdrop-blur-md p-6 md:p-10 rounded-2xl shadow-2xl border border-white/20">
-        <form onSubmit={handleSendBill} className="space-y-6">
-          
-          {/* CUSTOMER SEARCH SECTION (DOOR NUMBER) */}
-          <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 relative">
-            <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Search size={16} className="text-blue-500" /> Find by Door Number
-            </h3>
-            <div className="relative">
-              <input 
-                type="text" placeholder="Enter Door Number..." 
-                className={`w-full pl-10 pr-4 py-3 border rounded-lg outline-none transition-all font-bold text-lg ${selectedCustomer ? 'border-green-400 bg-green-50 text-green-800' : 'border-slate-300 focus:border-blue-500'}`}
-                value={nameQuery} 
-                onChange={(e) => {
-                  setNameQuery(e.target.value);
-                  setActiveSearch('door');
-                  setSelectedCustomer(null);
-                }} 
-              />
-              {activeSearch === 'door' && nameQuery && (
-                <div className="absolute top-[55px] left-0 w-full bg-white border border-slate-200 shadow-xl rounded-lg mt-1 max-h-60 overflow-y-auto z-50">
-                  {customers.filter(c => c.doorNumber?.toLowerCase().includes(nameQuery.toLowerCase())).map(c => (
-                    <div key={c.id} onClick={() => handleSelectCustomer(c)} className="px-4 py-3 border-b hover:bg-sky-50 cursor-pointer">
-                      <p className="font-extrabold text-blue-900 text-lg">Door: {c.doorNumber}</p>
-                      <p className="text-xs text-slate-500 font-medium">{c.name} • {c.phone}</p>
+      {/* ── BILLING FORM CARD ────────────────────────── */}
+      <div className="crm-card p-6 md:p-8">
+        <form id="billing-form" onSubmit={handleSendBill} className="space-y-6">
+
+          {/* ── CUSTOMER SEARCH ── */}
+          <div>
+            <div className="section-header">
+              <Search size={13} />
+              Find Customer by Door Number
+            </div>
+
+            <div style={{ position: 'relative' }}>
+              <div className="search-wrapper">
+                <Search size={15} />
+                <input
+                  id="door-search-input"
+                  type="text"
+                  placeholder="Enter door number..."
+                  className={`crm-input ${selectedCustomer ? 'border-green-400' : ''}`}
+                  style={selectedCustomer ? { backgroundColor: '#F0FDF4', color: '#15803D', fontWeight: 600 } : {}}
+                  value={nameQuery}
+                  onChange={(e) => {
+                    setNameQuery(e.target.value);
+                    setActiveSearch('door');
+                    setSelectedCustomer(null);
+                  }}
+                  readOnly={!!selectedCustomer}
+                />
+              </div>
+
+              {/* Dropdown */}
+              {activeSearch === 'door' && nameQuery && !selectedCustomer && (
+                <div
+                  className="absolute left-0 right-0 rounded-xl shadow-lg overflow-hidden animate-fade-in"
+                  style={{
+                    top: 'calc(100% + 6px)',
+                    backgroundColor: 'var(--surface-card)',
+                    border: '1px solid var(--surface-border)',
+                    zIndex: 50,
+                    maxHeight: '220px',
+                    overflowY: 'auto',
+                  }}
+                >
+                  {filtered.length === 0 ? (
+                    <div className="p-4 text-sm text-center" style={{ color: 'var(--text-muted)' }}>
+                      No customers found for "{nameQuery}"
                     </div>
-                  ))}
+                  ) : (
+                    filtered.map((c) => (
+                      <div
+                        key={c.id}
+                        onClick={() => handleSelectCustomer(c)}
+                        className="px-4 py-3 cursor-pointer transition-colors"
+                        style={{ borderBottom: '1px solid var(--surface-border-light)' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-base)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                      >
+                        <p className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
+                          Door: {c.doorNumber}
+                        </p>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                          {c.name} • {c.phone}
+                        </p>
+                      </div>
+                    ))
+                  )}
                 </div>
               )}
             </div>
+
+            {/* Selected Customer Chip */}
             {selectedCustomer && (
-              <div className="mt-4 flex items-center gap-2 text-sm font-semibold text-green-700 bg-green-100 px-3 py-2 rounded-lg w-fit border border-green-200">
-                <CheckCircle size={16} /> Locked to Door {selectedCustomer.doorNumber} ({selectedCustomer.name})
+              <div
+                className="flex items-center justify-between mt-3 px-3 py-2.5 rounded-lg animate-fade-in"
+                style={{
+                  backgroundColor: '#F0FDF4',
+                  border: '1px solid #BBF7D0',
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <CheckCircle size={15} style={{ color: '#16A34A' }} />
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: '#15803D' }}>
+                      {selectedCustomer.name}
+                    </p>
+                    <p className="text-xs" style={{ color: '#4ADE80' }}>
+                      Door {selectedCustomer.doorNumber} • {selectedCustomer.phone}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleClearCustomer}
+                  className="p-1 rounded-lg"
+                  style={{ color: '#15803D' }}
+                  title="Clear selection"
+                >
+                  <X size={14} />
+                </button>
               </div>
             )}
           </div>
 
-          {/* AMOUNT INPUT */}
+          {/* ── AMOUNT INPUT ── */}
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Bill Amount (₹)</label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-lg">₹</span>
-              <input type="number" required min="1" placeholder="0.00" 
-                className="w-full pl-10 pr-4 py-4 border border-slate-300 rounded-xl outline-none bg-slate-50 text-xl font-bold text-slate-800 focus:border-blue-500" 
-                value={amount} onChange={(e) => setAmount(e.target.value)} 
+            <label className="crm-label" htmlFor="bill-amount-input">
+              <IndianRupee size={11} className="inline mr-1" />
+              Bill Amount (₹)
+            </label>
+            <div style={{ position: 'relative' }}>
+              <span
+                className="absolute font-semibold text-base"
+                style={{
+                  left: '14px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--text-muted)',
+                  pointerEvents: 'none',
+                }}
+              >
+                ₹
+              </span>
+              <input
+                id="bill-amount-input"
+                type="number"
+                required
+                min="1"
+                placeholder="0.00"
+                className="crm-input"
+                style={{ paddingLeft: '32px', fontSize: '18px', fontWeight: 700 }}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
               />
             </div>
           </div>
 
-          {/* PAYMENT MODE CHECKBOX */}
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-            <label className="flex items-center gap-3 cursor-pointer group">
-              <input type="checkbox" className="w-5 h-5 accent-green-600 rounded cursor-pointer" checked={isCash} onChange={(e) => setIsCash(e.target.checked)} />
+          {/* ── PAYMENT MODE ── */}
+          <div
+            className="rounded-xl p-4"
+            style={{ backgroundColor: 'var(--surface-base)', border: '1.5px solid var(--surface-border)' }}
+          >
+            <label
+              className="flex items-center gap-3 cursor-pointer"
+              htmlFor="cash-payment-checkbox"
+            >
+              <input
+                id="cash-payment-checkbox"
+                type="checkbox"
+                className="w-4 h-4 rounded cursor-pointer"
+                style={{ accentColor: '#16A34A' }}
+                checked={isCash}
+                onChange={(e) => setIsCash(e.target.checked)}
+              />
               <div className="flex items-center gap-2">
-                <Banknote size={20} className="text-green-600"/>
-                <span className="font-extrabold text-slate-800">Customer paying via Cash / Direct GPay</span>
+                <div className="icon-chip icon-chip-green" style={{ width: '32px', height: '32px', borderRadius: '8px' }}>
+                  <Banknote size={15} />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
+                    Cash / Direct GPay Payment
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                    Bypasses Razorpay. Bill instantly marked as PAID.
+                  </p>
+                </div>
               </div>
             </label>
-            <p className="text-xs text-slate-500 mt-2 ml-8 font-medium">Bypasses Razorpay link generation. Bill is instantly marked as PAID in the system.</p>
           </div>
 
-          {/* NOTIFICATION CHECKBOXES */}
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-            <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3">Send Receipt / Link Via:</h3>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <label className="flex flex-1 items-center gap-3 p-3 bg-white border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50">
-                <input type="checkbox" className="w-5 h-5 accent-emerald-500 rounded" checked={notifyWhatsapp} onChange={(e) => setNotifyWhatsapp(e.target.checked)} />
-                <MessageCircle size={18} className="text-emerald-500"/> <span className="font-bold text-slate-700">WhatsApp</span>
+          {/* ── NOTIFICATION OPTIONS ── */}
+          <div>
+            <div className="section-header">
+              <MessageCircle size={13} />
+              Send Receipt / Link Via
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <label
+                className="flex items-center gap-3 p-3.5 rounded-xl cursor-pointer transition-all"
+                style={{
+                  border: `1.5px solid ${notifyWhatsapp ? '#22C55E' : 'var(--surface-border)'}`,
+                  backgroundColor: notifyWhatsapp ? '#F0FDF4' : 'var(--surface-card)',
+                }}
+                htmlFor="whatsapp-notify-checkbox"
+              >
+                <input
+                  id="whatsapp-notify-checkbox"
+                  type="checkbox"
+                  className="w-4 h-4"
+                  style={{ accentColor: '#22C55E' }}
+                  checked={notifyWhatsapp}
+                  onChange={(e) => setNotifyWhatsapp(e.target.checked)}
+                />
+                <div className="flex items-center gap-2">
+                  <MessageCircle size={16} style={{ color: '#22C55E' }} />
+                  <span className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>WhatsApp</span>
+                </div>
               </label>
-              
-              <label className="flex flex-1 items-center gap-3 p-3 bg-white border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50">
-                <input type="checkbox" className="w-5 h-5 accent-blue-500 rounded" checked={notifySms} onChange={(e) => setNotifySms(e.target.checked)} />
-                <Smartphone size={18} className="text-blue-500"/> <span className="font-bold text-slate-700">SMS</span>
+
+              <label
+                className="flex items-center gap-3 p-3.5 rounded-xl cursor-pointer transition-all"
+                style={{
+                  border: `1.5px solid ${notifySms ? 'var(--brand-primary)' : 'var(--surface-border)'}`,
+                  backgroundColor: notifySms ? '#EFF6FF' : 'var(--surface-card)',
+                }}
+                htmlFor="sms-notify-checkbox"
+              >
+                <input
+                  id="sms-notify-checkbox"
+                  type="checkbox"
+                  className="w-4 h-4"
+                  style={{ accentColor: 'var(--brand-primary)' }}
+                  checked={notifySms}
+                  onChange={(e) => setNotifySms(e.target.checked)}
+                />
+                <div className="flex items-center gap-2">
+                  <Smartphone size={16} style={{ color: 'var(--brand-primary)' }} />
+                  <span className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>SMS</span>
+                </div>
               </label>
             </div>
           </div>
 
-          <button type="submit" disabled={status.type === 'loading'} className="w-full bg-gradient-to-r from-blue-700 to-blue-900 hover:from-blue-800 text-white font-extrabold text-lg py-4 rounded-xl shadow-lg">
-            {status.type === 'loading' ? 'Processing...' : isCash ? 'Record Cash Payment' : 'Generate Secure Link'}
+          {/* ── SUBMIT ── */}
+          <button
+            id="generate-bill-btn"
+            type="submit"
+            disabled={isSubmitting}
+            className="btn-primary w-full"
+            style={{ padding: '14px', fontSize: '15px' }}
+          >
+            {isSubmitting ? (
+              <>
+                <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Processing...
+              </>
+            ) : isCash ? (
+              <>
+                <Banknote size={17} />
+                Record Cash Payment
+              </>
+            ) : (
+              <>
+                <Receipt size={17} />
+                Generate Secure Invoice
+              </>
+            )}
           </button>
         </form>
 
+        {/* Status Alert */}
         {status.message && (
-          <div className={`mt-6 p-4 rounded-xl text-center font-bold text-sm border ${status.type === 'success' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+          <div
+            className={`crm-alert mt-5 ${
+              status.type === 'success'
+                ? 'crm-alert-success'
+                : status.type === 'error'
+                ? 'crm-alert-error'
+                : 'crm-alert-info'
+            }`}
+          >
+            {status.type === 'success' ? <CheckCircle size={15} /> : status.type === 'error' ? <X size={15} /> : null}
             {status.message}
           </div>
         )}

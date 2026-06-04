@@ -15,7 +15,21 @@ const pool = new Pool({ connectionString });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter }); 
 
-app.use(cors());
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:4173',
+  process.env.FRONTEND_URL, // e.g. https://find-laundry-crm.onrender.com
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (Postman, curl, Render health checks)
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS: origin ${origin} not allowed`));
+  },
+  credentials: true,
+}));
+
 app.use(express.json());
 
 // Initialize external services
@@ -254,7 +268,11 @@ app.get('/api/dashboard/stats', async (req, res) => {
   }
 });
 
+// --- HEALTH CHECK (required by Render) ---
+app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
+
 // --- SERVER START ---
+
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

@@ -1,43 +1,60 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Smartphone, MessageCircle, AlertCircle, CheckCircle2, Search, Filter } from 'lucide-react';
+import BASE_URL from '../api';
+import {
+  Smartphone,
+  MessageCircle,
+  AlertCircle,
+  CheckCircle2,
+  Search,
+  Filter,
+  RefreshCw,
+  RotateCcw,
+  Check,
+  Banknote,
+  History,
+} from 'lucide-react';
 
 export default function Logs() {
   const [logs, setLogs] = useState([]);
-  const [loadingId, setLoadingId] = useState(null); 
+  const [loadingId, setLoadingId] = useState(null);
   const [statusMsg, setStatusMsg] = useState({ type: '', text: '' });
-
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL'); 
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     fetchLogs();
   }, []);
 
   const fetchLogs = async () => {
+    setIsRefreshing(true);
     try {
-      const response = await axios.get('http://localhost:8080/api/logs');
+      const response = await axios.get(`${BASE_URL}/api/logs`);
       setLogs(response.data);
     } catch (error) {
-      console.error("Failed to load logs", error);
+      console.error('Failed to load logs', error);
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
-  const handleRemind = async (paymentId, method) => {
-    setLoadingId(`${paymentId}-${method}`); 
-    setStatusMsg({ type: 'info', text: 'Sending reminder...' });
+  const showMsg = (type, text) => {
+    setStatusMsg({ type, text });
+    setTimeout(() => setStatusMsg({ type: '', text: '' }), 4000);
+  };
 
+  const handleRemind = async (paymentId, method) => {
+    setLoadingId(`${paymentId}-${method}`);
+    showMsg('info', 'Sending reminder...');
     try {
-      const res = await axios.post('http://localhost:8080/api/billing/remind', {
+      const res = await axios.post(`${BASE_URL}/api/billing/remind`, {
         paymentId,
-        deliveryMethod: method
+        deliveryMethod: method,
       });
-      setStatusMsg({ type: 'success', text: `✅ ${res.data.message}` });
-      setTimeout(() => setStatusMsg({ type: '', text: '' }), 4000);
+      showMsg('success', res.data.message);
     } catch (error) {
-      const errorMsg = error.response?.data?.error || 'Failed to send reminder.';
-      setStatusMsg({ type: 'error', text: `❌ ${errorMsg}` });
-      setTimeout(() => setStatusMsg({ type: '', text: '' }), 4000);
+      showMsg('error', error.response?.data?.error || 'Failed to send reminder.');
     } finally {
       setLoadingId(null);
     }
@@ -45,232 +62,308 @@ export default function Logs() {
 
   const handleVerify = async (paymentId) => {
     setLoadingId(`verify-${paymentId}`);
-    setStatusMsg({ type: 'info', text: 'Checking Razorpay...' });
-
+    showMsg('info', 'Checking Razorpay...');
     try {
-      const res = await axios.get(`http://localhost:8080/api/billing/verify/${paymentId}`);
-      setStatusMsg({ type: 'success', text: `✅ ${res.data.message}` });
-      fetchLogs(); 
-      setTimeout(() => setStatusMsg({ type: '', text: '' }), 4000);
+      const res = await axios.get(`${BASE_URL}/api/billing/verify/${paymentId}`);
+      showMsg('success', res.data.message);
+      fetchLogs();
     } catch (error) {
-      setStatusMsg({ type: 'error', text: '❌ Failed to verify payment.' });
-      setTimeout(() => setStatusMsg({ type: '', text: '' }), 4000);
+      showMsg('error', 'Failed to verify payment.');
     } finally {
       setLoadingId(null);
     }
   };
 
   const handleManualPay = async (paymentId) => {
-    // SECURITY CHECK: This triggers the browser's built-in alert box!
-    const confirmed = window.confirm("⚠️ SECURITY CHECK\n\nAre you sure this customer has paid via Cash or GPay? Please verify before continuing.");
-    
-    // If they click "Cancel", the function stops here.
+    const confirmed = window.confirm(
+      '⚠️ Security Check\n\nConfirm that this customer has paid via Cash or GPay before continuing.'
+    );
     if (!confirmed) return;
 
     setLoadingId(`manual-${paymentId}`);
-    setStatusMsg({ type: 'info', text: 'Updating status to PAID...' });
-
+    showMsg('info', 'Updating status to PAID...');
     try {
-      await axios.put(`http://localhost:8080/api/billing/manual-pay/${paymentId}`);
-      setStatusMsg({ type: 'success', text: `✅ Bill #${paymentId} manually marked as PAID.` });
-      fetchLogs(); // Refresh the table
-      setTimeout(() => setStatusMsg({ type: '', text: '' }), 4000);
+      await axios.put(`${BASE_URL}/api/billing/manual-pay/${paymentId}`);
+      showMsg('success', `Bill #${paymentId} marked as PAID.`);
+      fetchLogs();
     } catch (error) {
-      setStatusMsg({ type: 'error', text: '❌ Failed to update status.' });
-      setTimeout(() => setStatusMsg({ type: '', text: '' }), 4000);
+      showMsg('error', 'Failed to update status.');
     } finally {
       setLoadingId(null);
     }
   };
 
-  // --- DYNAMIC LIVE FILTERING (By Door Number) ---
   const filteredLogs = logs.filter((log) => {
-    // Safely check if doorNumber exists before calling toLowerCase()
     const logDoor = log.doorNumber || '';
     const customerDoor = log.customer?.doorNumber || '';
-    
-    const matchesSearch = 
-      logDoor.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const matchesSearch =
+      logDoor.toLowerCase().includes(searchQuery.toLowerCase()) ||
       customerDoor.toLowerCase().includes(searchQuery.toLowerCase());
-
     const matchesStatus = statusFilter === 'ALL' || log.status === statusFilter;
-
     return matchesSearch && matchesStatus;
   });
 
   const totalCount = logs.length;
-  const paidCount = logs.filter(l => l.status === 'PAID').length;
-  const pendingCount = logs.filter(l => l.status === 'PENDING').length;
+  const paidCount = logs.filter((l) => l.status === 'PAID').length;
+  const pendingCount = logs.filter((l) => l.status === 'PENDING').length;
+
+  const filterOptions = [
+    { label: `All`, count: totalCount, key: 'ALL', activeStyle: { backgroundColor: 'var(--text-primary)', color: '#fff' }, inactiveStyle: { backgroundColor: 'var(--surface-base)', color: 'var(--text-secondary)' } },
+    { label: `Paid`, count: paidCount, key: 'PAID', icon: CheckCircle2, activeStyle: { backgroundColor: '#16A34A', color: '#fff' }, inactiveStyle: { backgroundColor: '#F0FDF4', color: '#15803D', border: '1px solid #BBF7D0' } },
+    { label: `Unpaid`, count: pendingCount, key: 'PENDING', icon: AlertCircle, activeStyle: { backgroundColor: '#D97706', color: '#fff' }, inactiveStyle: { backgroundColor: '#FFFBEB', color: '#B45309', border: '1px solid #FDE68A' } },
+  ];
 
   return (
-    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
-      
-      {/* HEADER SECTION */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b border-slate-200/50 pb-4">
+    <div className="p-6 md:p-10 max-w-6xl mx-auto animate-fade-in-up">
+
+      {/* ── PAGE HEADER ──────────────────────────────── */}
+      <div className="page-header flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-extrabold text-white tracking-tight drop-shadow-md">Billing Logs & Audits</h2>
-          <p className="text-blue-200 mt-1 font-medium tracking-wide">Track transaction lifecycles and follow up with pending accounts.</p>
+          <h1 className="page-title">Billing Logs &amp; Audits</h1>
+          <p className="page-subtitle">Track transaction lifecycles and follow up with pending accounts.</p>
         </div>
-        
-        {statusMsg.text && (
-          <div className={`px-4 py-2 rounded-xl font-bold text-sm shadow-sm transition-all animate-pulse ${
-            statusMsg.type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' :
-            statusMsg.type === 'error' ? 'bg-red-100 text-red-800 border border-red-200' :
-            'bg-blue-100 text-blue-800 border border-blue-200'
-          }`}>
-            {statusMsg.text}
-          </div>
-        )}
+
+        <div className="flex items-center gap-3">
+          {/* Global Status Alert */}
+          {statusMsg.text && (
+            <div
+              className={`crm-alert ${
+                statusMsg.type === 'success'
+                  ? 'crm-alert-success'
+                  : statusMsg.type === 'error'
+                  ? 'crm-alert-error'
+                  : 'crm-alert-info'
+              }`}
+            >
+              {statusMsg.text}
+            </div>
+          )}
+          <button id="logs-refresh-btn" onClick={fetchLogs} className="btn-secondary" disabled={isRefreshing}>
+            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        </div>
       </div>
 
-      {/* ADVANCED LIVE FILTER CONTROL ROW */}
-      <div className="bg-white/90 backdrop-blur-md p-4 rounded-xl shadow-lg border border-white/20 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-        
-        {/* Smart Search Box (Door Number) */}
-        <div className="relative md:col-span-1">
-          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input 
+      {/* ── FILTER BAR ───────────────────────────────── */}
+      <div
+        className="crm-card px-5 py-4 mb-5 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between"
+      >
+        {/* Search */}
+        <div className="search-wrapper w-full sm:w-72">
+          <Search size={15} />
+          <input
+            id="logs-search-input"
             type="text"
-            placeholder="Search by Door No..."
-            className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-bold"
+            placeholder="Search by door number..."
+            className="crm-input"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
 
-        {/* Status Segments Selector */}
-        <div className="flex items-center gap-1.5 md:col-span-2 md:justify-end">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-2 hidden sm:inline flex items-center gap-1">
-            <Filter size={14} /> Filter:
+        {/* Status Filter Pills */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span
+            className="text-xs font-semibold uppercase tracking-wider hidden sm:flex items-center gap-1"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            <Filter size={12} />
+            Filter:
           </span>
-          
-          <button
-            onClick={() => setStatusFilter('ALL')}
-            className={`px-4 py-2 rounded-lg text-xs font-extrabold tracking-wide transition-all ${
-              statusFilter === 'ALL' ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            All ({totalCount})
-          </button>
-
-          <button
-            onClick={() => setStatusFilter('PAID')}
-            className={`px-4 py-2 rounded-lg text-xs font-extrabold tracking-wide transition-all flex items-center gap-1.5 ${
-              statusFilter === 'PAID' ? 'bg-green-600 text-white shadow-md shadow-green-100' : 'bg-green-50 text-green-700 hover:bg-green-100'
-            }`}
-          >
-            <CheckCircle2 size={14} /> Paid ({paidCount})
-          </button>
-
-          <button
-            onClick={() => setStatusFilter('PENDING')}
-            className={`px-4 py-2 rounded-lg text-xs font-extrabold tracking-wide transition-all flex items-center gap-1.5 ${
-              statusFilter === 'PENDING' ? 'bg-orange-600 text-white shadow-md shadow-orange-100' : 'bg-orange-50 text-orange-700 hover:bg-orange-100'
-            }`}
-          >
-            <AlertCircle size={14} /> Unpaid ({pendingCount})
-          </button>
+          {filterOptions.map((opt) => {
+            const Icon = opt.icon;
+            const isActive = statusFilter === opt.key;
+            return (
+              <button
+                key={opt.key}
+                onClick={() => setStatusFilter(opt.key)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all"
+                style={isActive ? opt.activeStyle : { ...opt.inactiveStyle, border: '1px solid var(--surface-border)' }}
+              >
+                {Icon && <Icon size={12} />}
+                {opt.label} ({opt.count})
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* DATA TABLE WRAPPER */}
-      <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-white/20 overflow-hidden">
+      {/* ── DATA TABLE ───────────────────────────────── */}
+      <div className="crm-card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="crm-table">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-sm">
-                <th className="p-4 font-semibold w-24">Bill ID</th>
-                <th className="p-4 font-semibold">Customer</th>
-                <th className="p-4 font-semibold text-center w-24">Door No.</th>
-                <th className="p-4 font-semibold">Amount</th>
-                <th className="p-4 font-semibold text-center w-32">Status</th>
-                <th className="p-4 font-semibold text-center w-32">Method</th>
-                <th className="p-4 font-semibold text-right w-48">Quick Actions</th>
+              <tr>
+                <th>Bill ID</th>
+                <th>Customer</th>
+                <th style={{ textAlign: 'center' }}>Door No.</th>
+                <th>Amount</th>
+                <th style={{ textAlign: 'center' }}>Status</th>
+                <th style={{ textAlign: 'center' }}>Channel</th>
+                <th style={{ textAlign: 'right', paddingRight: '24px' }}>Quick Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredLogs.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="p-12 text-center text-slate-400 italic font-medium bg-slate-50/50">
-                    No records match your search criteria.
+                  <td colSpan="7">
+                    <div className="empty-state">
+                      <History size={40} style={{ margin: '0 auto 12px', color: '#CBD5E1' }} />
+                      <p>No records match your filter.</p>
+                      <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                        Try adjusting your search or status filter.
+                      </p>
+                    </div>
                   </td>
                 </tr>
               ) : (
                 filteredLogs.map((log) => (
-                  <tr key={log.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
-                    <td className="p-4 font-mono text-slate-500 text-sm w-24">#{log.id}</td>
-                    
-                    <td className="p-4">
-                      <p className="font-bold text-slate-800">{log.customer?.name}</p>
-                      <p className="text-xs text-slate-500 font-medium">{log.customer?.phone}</p>
+                  <tr key={log.id}>
+                    {/* Bill ID */}
+                    <td>
+                      <span
+                        className="font-mono text-xs px-2 py-1 rounded"
+                        style={{ backgroundColor: 'var(--surface-base)', color: 'var(--text-muted)' }}
+                      >
+                        #{log.id}
+                      </span>
                     </td>
 
-                    {/* NEW DOOR NUMBER CELL */}
-                    <td className="p-4 text-center font-extrabold text-blue-900 bg-blue-50/30">
-                      {log.doorNumber || log.customer?.doorNumber || '-'}
+                    {/* Customer */}
+                    <td>
+                      <p className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
+                        {log.customer?.name}
+                      </p>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                        {log.customer?.phone}
+                      </p>
                     </td>
-                    
-                    <td className="p-4 font-extrabold text-slate-700">₹{log.amount}</td>
-                    
-                    <td className="p-4 text-center w-32 whitespace-nowrap">
+
+                    {/* Door Number */}
+                    <td style={{ textAlign: 'center' }}>
+                      <span className="badge badge-blue">
+                        {log.doorNumber || log.customer?.doorNumber || '—'}
+                      </span>
+                    </td>
+
+                    {/* Amount */}
+                    <td>
+                      <span className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>
+                        ₹{log.amount}
+                      </span>
+                    </td>
+
+                    {/* Status */}
+                    <td style={{ textAlign: 'center' }}>
                       {log.status === 'PAID' ? (
-                        <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold">
-                          <CheckCircle2 size={14} /> PAID
+                        <span className="badge badge-paid">
+                          <CheckCircle2 size={11} />
+                          PAID
                         </span>
                       ) : (
-                        <div className="flex flex-col items-center gap-1">
-                          <span className="inline-flex items-center gap-1 bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold">
-                            <AlertCircle size={14} /> PENDING
+                        <div className="flex flex-col items-center gap-1.5">
+                          <span className="badge badge-pending">
+                            <AlertCircle size={11} />
+                            PENDING
                           </span>
-                          <div className="flex items-center gap-2 mt-1">
-                            <button 
+                          <div className="flex items-center gap-2">
+                            <button
                               onClick={() => handleVerify(log.id)}
                               disabled={loadingId !== null}
-                              className="text-[10px] uppercase font-extrabold text-slate-400 hover:text-blue-600 transition-colors"
+                              className="flex items-center gap-1 text-xs font-semibold transition-colors disabled:opacity-50"
+                              style={{ color: 'var(--brand-primary)' }}
+                              title="Sync with Razorpay"
                             >
-                              ↻ Sync
+                              <RotateCcw size={11} />
+                              Sync
                             </button>
-                            <span className="text-slate-200">|</span>
-                            {/* THE NEW MANUAL PAY BUTTON */}
-                            <button 
+                            <span style={{ color: 'var(--surface-border)', fontSize: '12px' }}>|</span>
+                            <button
                               onClick={() => handleManualPay(log.id)}
                               disabled={loadingId !== null}
-                              className="text-[10px] uppercase font-extrabold text-slate-400 hover:text-green-600 transition-colors"
+                              className="flex items-center gap-1 text-xs font-semibold transition-colors disabled:opacity-50"
+                              style={{ color: '#16A34A' }}
+                              title="Mark as manually paid"
                             >
-                              ✓ Mark Paid
+                              <Check size={11} />
+                              Mark Paid
                             </button>
                           </div>
                         </div>
                       )}
                     </td>
 
-                    <td className="p-4 text-center w-32 whitespace-nowrap">
+                    {/* Channel */}
+                    <td style={{ textAlign: 'center' }}>
                       {log.deliveryMethod === 'whatsapp' ? (
-                        <span className="inline-flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md text-xs font-bold border border-emerald-100">
-                          <MessageCircle size={14} /> WA
+                        <span className="badge" style={{ backgroundColor: '#ECFDF5', color: '#059669' }}>
+                          <MessageCircle size={11} />
+                          WhatsApp
                         </span>
                       ) : log.deliveryMethod === 'sms' ? (
-                        <span className="inline-flex items-center gap-1 text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md text-xs font-bold border border-blue-100">
-                          <Smartphone size={14} /> SMS
+                        <span className="badge badge-blue">
+                          <Smartphone size={11} />
+                          SMS
+                        </span>
+                      ) : log.deliveryMethod === 'cash' ? (
+                        <span className="badge badge-paid">
+                          <Banknote size={11} />
+                          Cash
                         </span>
                       ) : (
-                        <span className="text-slate-400 text-xs font-bold">-</span>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>—</span>
                       )}
                     </td>
 
-                    <td className="p-4 text-right w-48 whitespace-nowrap">
+                    {/* Quick Actions */}
+                    <td style={{ textAlign: 'right', paddingRight: '20px' }}>
                       {log.status === 'PENDING' ? (
                         <div className="flex justify-end gap-2">
-                          <button onClick={() => handleRemind(log.id, 'whatsapp')} disabled={loadingId !== null} className="flex items-center gap-1 px-3 py-2 bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 rounded-lg text-sm font-bold transition disabled:opacity-50">
-                            {loadingId === `${log.id}-whatsapp` ? '...' : <><MessageCircle size={15} /> WA</>}
+                          <button
+                            id={`remind-wa-${log.id}`}
+                            onClick={() => handleRemind(log.id, 'whatsapp')}
+                            disabled={loadingId !== null}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+                            style={{
+                              backgroundColor: '#ECFDF5',
+                              color: '#059669',
+                              border: '1px solid #A7F3D0',
+                            }}
+                          >
+                            {loadingId === `${log.id}-whatsapp` ? (
+                              <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <MessageCircle size={13} />
+                            )}
+                            WA
                           </button>
-                          
-                          <button onClick={() => handleRemind(log.id, 'sms')} disabled={loadingId !== null} className="flex items-center gap-1 px-3 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg text-sm font-bold transition disabled:opacity-50">
-                            {loadingId === `${log.id}-sms` ? '...' : <><Smartphone size={15} /> SMS</>}
+                          <button
+                            id={`remind-sms-${log.id}`}
+                            onClick={() => handleRemind(log.id, 'sms')}
+                            disabled={loadingId !== null}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+                            style={{
+                              backgroundColor: '#EFF6FF',
+                              color: '#2563EB',
+                              border: '1px solid #BFDBFE',
+                            }}
+                          >
+                            {loadingId === `${log.id}-sms` ? (
+                              <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <Smartphone size={13} />
+                            )}
+                            SMS
                           </button>
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-400 font-bold italic pr-4">No actions required</span>
+                        <span
+                          className="text-xs font-medium italic pr-2"
+                          style={{ color: 'var(--text-muted)' }}
+                        >
+                          No action required
+                        </span>
                       )}
                     </td>
                   </tr>
@@ -279,6 +372,30 @@ export default function Logs() {
             </tbody>
           </table>
         </div>
+
+        {/* Table Footer */}
+        {filteredLogs.length > 0 && (
+          <div
+            className="px-5 py-3 flex items-center justify-between"
+            style={{
+              borderTop: '1px solid var(--surface-border)',
+              backgroundColor: '#FAFBFC',
+            }}
+          >
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              Showing <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>{filteredLogs.length}</span> of{' '}
+              <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>{totalCount}</span> records
+            </p>
+            <div className="flex items-center gap-4">
+              <span className="text-xs" style={{ color: '#15803D', fontWeight: 600 }}>
+                ✓ {paidCount} Paid
+              </span>
+              <span className="text-xs" style={{ color: '#B45309', fontWeight: 600 }}>
+                ⏳ {pendingCount} Pending
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
