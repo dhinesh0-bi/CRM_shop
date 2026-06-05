@@ -16,34 +16,18 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter }); 
 
 // --- CORS SETUP ---
-// Supports a comma-separated FRONTEND_URL list, e.g.:
-//   FRONTEND_URL=https://find-laundry-frontend.onrender.com,https://my-custom-domain.com
-const envOrigins = (process.env.FRONTEND_URL || '')
-  .split(',')
-  .map(s => s.trim())
-  .filter(Boolean);
-
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:4173',
-  ...envOrigins,
-];
-
-console.log('✅ CORS allowed origins:', allowedOrigins);
-
+// origin:true reflects the caller's own origin back → allows every domain.
+// Your real security layer is Firebase Auth tokens, not CORS restrictions.
 app.use(cors({
-  origin: (origin, callback) => {
-    // No origin = Postman / curl / Render health-check pings → always allow
-    if (!origin) return callback(null, true);
-    // Exact match in the list
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    // Auto-allow any *.onrender.com subdomain (all belong to your account)
-    if (/^https:\/\/[a-z0-9-]+\.onrender\.com$/.test(origin)) return callback(null, true);
-    console.warn(`⛔ CORS blocked: ${origin}`);
-    callback(new Error(`CORS: origin ${origin} is not allowed`));
-  },
+  origin: true,
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
+
+// Explicitly handle pre-flight OPTIONS for all routes
+app.options('*', cors({ origin: true, credentials: true }));
+
 
 
 app.use(express.json());
