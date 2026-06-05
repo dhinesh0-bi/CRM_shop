@@ -15,20 +15,36 @@ const pool = new Pool({ connectionString });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter }); 
 
+// --- CORS SETUP ---
+// Supports a comma-separated FRONTEND_URL list, e.g.:
+//   FRONTEND_URL=https://find-laundry-frontend.onrender.com,https://my-custom-domain.com
+const envOrigins = (process.env.FRONTEND_URL || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:4173',
-  process.env.FRONTEND_URL, // e.g. https://find-laundry-crm.onrender.com
-].filter(Boolean);
+  ...envOrigins,
+];
+
+console.log('✅ CORS allowed origins:', allowedOrigins);
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (Postman, curl, Render health checks)
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    callback(new Error(`CORS: origin ${origin} not allowed`));
+    // No origin = Postman / curl / Render health-check pings → always allow
+    if (!origin) return callback(null, true);
+    // Exact match in the list
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    // Auto-allow any *.onrender.com subdomain (all belong to your account)
+    if (/^https:\/\/[a-z0-9-]+\.onrender\.com$/.test(origin)) return callback(null, true);
+    console.warn(`⛔ CORS blocked: ${origin}`);
+    callback(new Error(`CORS: origin ${origin} is not allowed`));
   },
   credentials: true,
 }));
+
 
 app.use(express.json());
 
