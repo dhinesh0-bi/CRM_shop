@@ -29,8 +29,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// Explicitly handle pre-flight OPTIONS for all routes
-app.options('*', cors({ origin: true, credentials: true }));
+// // Explicitly handle pre-flight OPTIONS for all routes
+// app.options('/(.*)', cors({ origin: true, credentials: true }));
 
 
 
