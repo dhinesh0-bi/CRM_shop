@@ -19,9 +19,14 @@ const prisma = new PrismaClient({ adapter });
 // origin:true reflects the caller's own origin back → allows every domain.
 // Your real security layer is Firebase Auth tokens, not CORS restrictions.
 app.use(cors({
-    origin: '*', // Allows your frontend to connect without exact URL matching issues
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Explicitly allows the preflight 'OPTIONS'
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
+  origin: [
+    'https://find-laundry-frontend.onrender.com', // Your live React app
+    'http://localhost:5173',                      // For local testing
+    'http://localhost:3000'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
 // Explicitly handle pre-flight OPTIONS for all routes
