@@ -19,10 +19,9 @@ const prisma = new PrismaClient({ adapter });
 // origin:true reflects the caller's own origin back → allows every domain.
 // Your real security layer is Firebase Auth tokens, not CORS restrictions.
 app.use(cors({
-  origin: true,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+    origin: '*', // Allows your frontend to connect without exact URL matching issues
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Explicitly allows the preflight 'OPTIONS'
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
 }));
 
 // Explicitly handle pre-flight OPTIONS for all routes
